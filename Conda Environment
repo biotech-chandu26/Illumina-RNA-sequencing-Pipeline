@@ -1,0 +1,14 @@
+name: illumina-rnaseq
+
+channels:
+  - bioconda
+  - conda-forge
+
+dependencies:
+  - sra-tools
+  - hisat2
+  - samtools
+  - fastqc
+  - multiqc
+  - subread
+  - pigz
