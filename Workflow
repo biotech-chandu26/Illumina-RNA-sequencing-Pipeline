@@ -1,0 +1,43 @@
+SRA
+ │
+ ▼
+prefetch
+ │
+ ▼
+fasterq-dump
+ │
+ ▼
+FastQC
+ │
+ ▼
+MultiQC
+ │
+ ▼
+HISAT2 Index
+ │
+ ▼
+HISAT2 Alignment
+ │
+ ▼
+SAM
+ │
+ ▼
+BAM
+ │
+ ▼
+Sort
+ │
+ ▼
+Index
+ │
+ ▼
+Flagstat
+ │
+ ▼
+Coverage
+ │
+ ▼
+featureCounts
+ │
+ ▼
+Gene Counts
