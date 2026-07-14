@@ -1,0 +1,199 @@
+#!/bin/bash
+
+###############################################################################
+# Automated Illumina RNA-Seq Pipeline
+#
+# Organism : Trichiurus japonicus
+# Dataset  : SRR33408710
+# Platform : Illumina Paired-End RNA-Seq
+#
+# Author   : Chandrajeet
+###############################################################################
+
+set -e
+set -o pipefail
+
+#########################################
+# Configuration
+#########################################
+
+SRR="SRR33408710"
+
+THREADS=16
+
+GENOME="genome.fa"
+GTF="annotation.gtf"
+
+INDEX="hisat2_index/Tjaponicus"
+
+#########################################
+# Create folders
+#########################################
+
+mkdir -p \
+fastq \
+fastqc \
+multiqc \
+alignment \
+counts \
+logs \
+hisat2_index
+
+#########################################
+# Step 1. Download SRA (if needed)
+#########################################
+
+if [ ! -d "$SRR" ]; then
+    echo "Downloading SRA..."
+    prefetch $SRR --max-size 100G
+fi
+
+#########################################
+# Step 2. FASTQ extraction
+#########################################
+
+if [ ! -f fastq/${SRR}_1.fastq.gz ]; then
+
+    echo "Extracting FASTQ..."
+
+    fasterq-dump \
+        --split-files \
+        -e $THREADS \
+        -O fastq \
+        ${SRR}/${SRR}.sra
+
+    pigz -p $THREADS fastq/${SRR}_2.fastq
+    pigz -p $THREADS fastq/${SRR}_3.fastq
+
+fi
+
+#########################################
+# Step 3. FastQC
+#########################################
+
+echo "Running FastQC..."
+
+fastqc \
+fastq/${SRR}_2.fastq.gz \
+fastq/${SRR}_3.fastq.gz \
+-o fastqc \
+-t $THREADS
+
+#########################################
+# Step 4. MultiQC
+#########################################
+
+echo "Running MultiQC..."
+
+multiqc fastqc \
+-o multiqc
+
+#########################################
+# Step 5. Build HISAT2 index
+#########################################
+
+if [ ! -f ${INDEX}.1.ht2 ]; then
+
+    echo "Building HISAT2 index..."
+
+    hisat2-build \
+    -p $THREADS \
+    $GENOME \
+    $INDEX
+
+fi
+
+#########################################
+# Step 6. Alignment
+#########################################
+
+echo "Running HISAT2..."
+
+hisat2 \
+-p $THREADS \
+-x $INDEX \
+-1 fastq/${SRR}_2.fastq.gz \
+-2 fastq/${SRR}_3.fastq.gz \
+-S alignment/${SRR}.sam \
+2> logs/hisat2.log
+
+#########################################
+# Step 7. SAM -> BAM
+#########################################
+
+echo "Converting SAM to BAM..."
+
+samtools view \
+-@ $THREADS \
+-bS \
+alignment/${SRR}.sam \
+> alignment/${SRR}.bam
+
+#########################################
+# Step 8. Sort BAM
+#########################################
+
+echo "Sorting BAM..."
+
+samtools sort \
+-@ $THREADS \
+alignment/${SRR}.bam \
+-o alignment/${SRR}.sorted.bam
+
+#########################################
+# Step 9. Index BAM
+#########################################
+
+echo "Indexing BAM..."
+
+samtools index \
+alignment/${SRR}.sorted.bam
+
+#########################################
+# Step 10. Alignment statistics
+#########################################
+
+echo "Generating statistics..."
+
+samtools flagstat \
+alignment/${SRR}.sorted.bam \
+> alignment/flagstat.txt
+
+samtools stats \
+alignment/${SRR}.sorted.bam \
+> alignment/alignment.stats
+
+samtools coverage \
+alignment/${SRR}.sorted.bam \
+> alignment/coverage.txt
+
+#########################################
+# Step 11. Gene counting
+#########################################
+
+echo "Running featureCounts..."
+
+featureCounts \
+-T $THREADS \
+-p \
+-a $GTF \
+-o counts/gene_counts.txt \
+alignment/${SRR}.sorted.bam
+
+#########################################
+# Finished
+#########################################
+
+echo
+echo "====================================="
+echo "RNA-Seq Pipeline Finished Successfully"
+echo "====================================="
+echo
+echo "Results"
+echo "-------"
+echo "FASTQ        : fastq/"
+echo "FastQC       : fastqc/"
+echo "MultiQC      : multiqc/"
+echo "Alignment    : alignment/"
+echo "Gene Counts  : counts/gene_counts.txt"
+echo
